@@ -1,0 +1,81 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+    <camelContext xmlns="http://camel.apache.org/schema/spring">
+
+        <rest path="/CRMEvent/" bindingMode="json"
+              consumes="application/jsom"
+              produces="application/json">
+            <post path="/Account" routeId="account-create"
+                  type="cz.cra.project.integration.domain.Account">
+                <to uri="direct:submitAccount"/>
+            </post>
+        </rest>
+
+        <route id="submit-account">
+            <from uri="direct:submitAccount"/>
+            <wireTap uri="direct:processAccount"/>
+            <setHeader name="CamelHttpResponseCode">
+                <constant>204</constant>
+            </setHeader>
+            <setHeader name="CamelHttpResponseText">
+                <constant>Account accepted for creation</constant>
+            </setHeader>
+        </route>
+
+        <route id="process-account">
+            <from uri="direct:processAccount" id="process-account"/>
+            <log message=">>> Received: ${body}"/>
+            <process ref="accountProcessor"/>
+            <to uri="stream:out"/>
+            <marshal>
+                <json library="Jackson"/>
+            </marshal>
+            <log message="Common model: ${body}"/>
+            <setExchangePattern pattern="InOnly"/>
+            <multicast>
+                <to uri="amqp:queue:cra.integration.mediation"/>
+                <to uri="direct:consumeAccount"/>
+            </multicast>
+        </route>
+
+        <route id="consume-account">
+            <from uri="direct:consumeAccount"/>
+            <delay>
+                <constant>1000</constant>
+            </delay>
+            <log message="Consume Account"/>
+            <process ref="consumeAccountProcessor"/>
+            <log message="Payload from queue: ${body}"/>
+            <to uri="direct:billingAccount"/>
+        </route>
+
+        <route id="billing-account">
+            <from uri="direct:billingAccount"/>
+            <setHeader name="CamelHttpMethod">
+                <constant>POST</constant>
+            </setHeader>
+            <setHeader name="Content-Type">
+                <constant>application/json</constant>
+            </setHeader>
+            <setHeader name="CamelHttpUri">
+                <simple>http://localhost:9090/BillingService/BillingAccount</simple>
+            </setHeader>
+            <process ref="billingAccountProcessor"/>
+            <marshal>
+                <json library="Jackson"/>
+            </marshal>
+            <to uri="http://localhost:9090/BillingService/BillingAccount"/>
+        </route>
+
+    </camelContext>
+    <bean id="accountProcessor"
+          class="cz.cra.project.integration.process.AccountProcessor"/>
+    <bean id="consumeAccountProcessor"
+          class="cz.cra.project.integration.process.ConsumeAccountProcessor"/>
+    <bean id="billingAccountProcessor"
+          class="cz.cra.project.integration.process.BillingAccountProcessor"/>
+</beans>

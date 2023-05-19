@@ -1,0 +1,28 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+    <camelContext xmlns="http://camel.apache.org/schema/spring">
+        <rest path="/BillingService/" bindingMode="json" consumes="application/jsom" produces="application/json">
+            <post path="/BillingAccount" routeId="billing-account-create"
+                  type="cz.cra.project.billing.domain.BillingAccount">
+                <to uri="direct:submitAccount"/>
+            </post>
+        </rest>
+
+        <route>
+            <from uri="direct:submitAccount"/>
+            <log message="Setting Headers"/>
+            <setHeader name="CamelHttpResponseCode">
+                <constant>201</constant>
+            </setHeader>
+            <setHeader name="CamelHttpResponseText">
+                <constant>Account created</constant>
+            </setHeader>
+            <log message="Payload: ${body}"/>
+            <to uri="stream:out"/>
+        </route>
+    </camelContext>
+</beans>
